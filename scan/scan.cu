@@ -42,6 +42,28 @@ static inline int nextPow2(int n) {
 // Also, as per the comments in cudaScan(), you can implement an
 // "in-place" scan, since the timing harness makes a copy of input and
 // places it in result
+__global__ void
+upsweep_kernel(int two_d, float* result) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    int index_a = index*2*two_d + two_d - 1;
+    int index_b = index*2*two_d + 2*two_d - 1;
+
+    result[index_b] += result[index_a];
+}
+
+__global__ void
+downsweep_kernel(int two_d, float* result) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    int index_a = index*2*two_d + two_d - 1;
+    int index_b = index*2*two_d + 2*two_d - 1;
+
+    int t = result[index_a];
+    result[index_a] = result[index_b];
+    result[index_b] += t;
+}
+
 void exclusive_scan(int* input, int N, int* result)
 {
 
@@ -53,6 +75,7 @@ void exclusive_scan(int* input, int N, int* result)
     // on the CPU.  Your implementation will need to make multiple calls
     // to CUDA kernel functions (that you must write) to implement the
     // scan.
+    const int threadsPerBlock = 512;
 
 
 }
