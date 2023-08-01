@@ -43,25 +43,31 @@ static inline int nextPow2(int n) {
 // "in-place" scan, since the timing harness makes a copy of input and
 // places it in result
 __global__ void
-upsweep_kernel(int two_d, float* result) {
+upsweep_kernel(int two_d, int* result, int N) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
 
     int index_a = index*2*two_d + two_d - 1;
     int index_b = index*2*two_d + 2*two_d - 1;
 
-    result[index_b] += result[index_a];
+    if (index * 2 * two_d < N)
+    {
+        result[index_b] += result[index_a];
+    }
 }
 
 __global__ void
-downsweep_kernel(int two_d, float* result) {
+downsweep_kernel(int two_d, int* result, int N) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
 
     int index_a = index*2*two_d + two_d - 1;
     int index_b = index*2*two_d + 2*two_d - 1;
 
-    int t = result[index_a];
-    result[index_a] = result[index_b];
-    result[index_b] += t;
+    if (index * 2 * two_d < N)
+    {
+        int t = result[index_a];
+        result[index_a] = result[index_b];
+        result[index_b] += t;
+    }
 }
 
 void exclusive_scan(int* input, int N, int* result)
@@ -77,6 +83,29 @@ void exclusive_scan(int* input, int N, int* result)
     // scan.
     const int threadsPerBlock = 512;
 
+    memmove(result, input, N * sizeof(int));
+
+    for (int two_d = 1; two_d <= N/2; two_d*=2) {
+        int two_dplus1 = 2*two_d;
+        int num_blocks = ((N+two_dplus1-1) / two_dplus1 + threadsPerBlock - 1) / threadsPerBlock;
+        downsweep_kernel<<<num_blocks, threadsPerBlock>>>(two_d, result, N);
+        // parallel_for (int i = 0; i < N; i += two_dplus1) {
+        //     output[i+two_dplus1-1] += output[i+two_d-1];
+        // }
+    }
+
+    result[N-1] = 0;
+
+    for (int two_d = N/2; two_d >= 1; two_d /= 2) {
+        int two_dplus1 = 2*two_d;
+        int num_blocks = ((N+two_dplus1-1) / two_dplus1 + threadsPerBlock - 1) / threadsPerBlock;
+        upsweep_kernel<<<num_blocks, threadsPerBlock>>>(two_d, result, N);
+        // parallel_for (int i = 0; i < N; i += two_dplus1) {
+        //     int t = output[i+two_d-1];
+        //     output[i+two_d-1] = output[i+two_dplus1-1];
+        //     output[i+two_dplus1-1] += t;
+        // }
+    }
 
 }
 
